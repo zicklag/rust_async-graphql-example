@@ -58,7 +58,7 @@ impl Guard for SessionGuard {
             }
         }
 
-        Err("You're totally forbidden, dude. Try setting you session id to `7`".into())
+        Err("You're totally forbidden, dude. Try setting `x-session-id` header to `7`".into())
     }
 }
 
@@ -68,10 +68,12 @@ struct Query;
 
 #[Object]
 impl Query {
+    /// Just get the number `3`
     async fn example(&self) -> i32 {
         3
     }
 
+    /// You **must** have the `x-session-id` header set to 7 to be able to run this query
     #[graphql(guard(SessionGuard()))]
     async fn protected_query(&self) -> String {
         "You have gained access into the protected query".into()
