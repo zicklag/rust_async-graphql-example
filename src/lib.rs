@@ -1,12 +1,10 @@
 use std::convert::Infallible;
 
-use async_graphql::*;
+use async_graphql::{guard::Guard, *};
 use warp::{http::Response, Filter};
 
 pub async fn run() {
     let schema = get_schema();
-
-    let graphql_server = || {};
 
     let graphql_playground = || {
         Response::builder()
@@ -18,15 +16,20 @@ pub async fn run() {
 
     let routes = warp::path("graphql")
         .and(
-            warp::post().and(async_graphql_warp::graphql(schema).and_then(
-                |(schema, request): (MySchema, Request)| async move {
-                    // Execute query
-                    let resp = schema.execute(request).await;
+            warp::post()
+                .and(warp::header::optional::<String>("x-session-id"))
+                .and(async_graphql_warp::graphql(schema))
+                .and_then(
+                    |session_id, (schema, mut request): (MySchema, Request)| async move {
+                        request.data.insert(ClientData { session_id });
 
-                    // Return result
-                    Ok::<_, Infallible>(async_graphql_warp::Response::from(resp))
-                },
-            )),
+                        // Execute query
+                        let resp = schema.execute(request).await;
+
+                        // Return result
+                        Ok::<_, Infallible>(async_graphql_warp::Response::from(resp))
+                    },
+                ),
         )
         .or(warp::get().map(graphql_playground));
 
@@ -37,6 +40,28 @@ pub async fn run() {
 // Our schema stuff
 //
 
+struct ClientData {
+    session_id: Option<String>,
+}
+
+/// Guard that makes sure the user has a session
+struct SessionGuard;
+
+#[async_trait::async_trait]
+impl Guard for SessionGuard {
+    async fn check(&self, ctx: &Context<'_>) -> Result<()> {
+        let client_data: &ClientData = ctx.data().expect("Missing client data!");
+
+        if let Some(id) = &client_data.session_id {
+            if matches!(id.parse(), Ok(7)) {
+                return Ok(());
+            }
+        }
+
+        Err("You're totally forbidden, dude. Try setting you session id to `7`".into())
+    }
+}
+
 type MySchema = Schema<Query, EmptyMutation, EmptySubscription>;
 
 struct Query;
@@ -45,6 +70,11 @@ struct Query;
 impl Query {
     async fn example(&self) -> i32 {
         3
+    }
+
+    #[graphql(guard(SessionGuard()))]
+    async fn protected_query(&self) -> String {
+        "You have gained access into the protected query".into()
     }
 }
 

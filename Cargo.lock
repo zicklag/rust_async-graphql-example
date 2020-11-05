@@ -630,6 +630,7 @@ version = "0.1.0"
 dependencies = [
  "async-graphql",
  "async-graphql-warp",
+ "async-trait",
  "tokio",
  "warp",
 ]
